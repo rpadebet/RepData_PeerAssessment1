@@ -1,27 +1,150 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
+title: 'Reproducible Research: Peer Assessment 1'
+output:
   html_document:
-    keep_md: true
+    keep_md: yes
+  pdf_document: default
 ---
 
 
 ## Loading and preprocessing the data
-```{r}
+```{r, echo=FALSE,warning=FALSE}
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(knitr))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggthemes))
+```
+
+```{r, comment =""}
 activity <-read.csv("activity.csv",stringsAsFactors = FALSE)
 str(activity)
-summary(activity)
+activity$date = as.Date(activity$date,"%Y-%m-%d")
+
 ``` 
-## What is mean total number of steps taken per day?
 
+## Total Number of steps per day 
 
+### Histogram Plot
+```{r,echo=TRUE}
 
-## What is the average daily activity pattern?
+activity.day.steps <- aggregate(activity$steps, 
+                                by = list(activity$date),
+                                FUN = "sum",na.rm = TRUE)
 
+h1 <- hist(activity.day.steps[,2],xlab="Steps per day",
+           main ="Number of Steps per day",
+           col ="salmon",breaks =20)
+
+```
+
+### Mean and Median steps per day
+```{r createtable, results='asis', echo=TRUE, warning=FALSE}
+mean.total.steps <- round(mean(activity.day.steps[,2]),2)
+median.total.steps <- round(median(activity.day.steps[,2]),2)
+tab <- data.frame(Mean = mean.total.steps,Median = median.total.steps)
+kable(tab)
+```
+ 
+
+## Average daily Activity Pattern
+
+### Time Series Plot
+```{r timeseries1,echo=TRUE}
+
+activity.time.steps <- aggregate(activity$steps, by = list(activity$interval),FUN = "mean",na.rm = TRUE)
+names(activity.time.steps) <- c("Interval","AvgSteps")
+Max.5 <- activity.time.steps[activity.time.steps$AvgSteps == max(activity.time.steps$AvgSteps),1 ]
+
+plot(x = activity.time.steps$Interval,y = activity.time.steps$AvgSteps,
+     type = 'l',main = "Average daily pattern",
+     xlab = "Minutes",ylab = "Number of Steps",col = "red",lwd=2 )
+abline(v = Max.5,col = "blue",lwd =1)
+```
+**5 minute interval with maximum number of steps is at : `r Max.5` mins**
 
 
 ## Imputing missing values
 
+```{r,echo=TRUE}
+NumNA <- sum(is.na(activity$steps))
+```
 
+**The total number of rows with `NA`s is `r NumNA`**
 
-## Are there differences in activity patterns between weekdays and weekends?
+### Creating a data set after imputing data
+
+**Impute Strategy** is to replace NA values for any 5 minute interval with the average value for that 5 minute interval across all days
+
+```{r imputation, echo=TRUE,cache=TRUE}
+impute <- function(v){
+    if(is.na(v$steps)){
+        v$steps = activity.time.steps[activity.time.steps$Interval==v$interval,2]
+    }
+    else{
+        v$steps = v$steps
+    } 
+    return(v$steps)
+}
+
+clean.steps = as.vector(NULL)
+
+for (i in seq(1:nrow(activity))){
+    clean.steps[i] <- impute(activity[i,])
+}
+
+activity.clean <-cbind(activity,clean.steps)
+
+```
+
+## Comparison of histograms after imputing data
+
+```{r hist2,echo=TRUE}
+activity.day.clean <- aggregate(activity.clean$clean.steps,
+                                     by = list(activity.clean$date),
+                                     FUN = "sum")
+
+par(mfrow=c(1,2))
+h1 <- hist(activity.day.steps[,2],
+           xlab="Steps per day",main ="Original Data",
+           col ="salmon",breaks =20,xlim = c(0,25000),ylim = c(0,25))
+
+h2 <- hist(activity.day.clean[,2],
+           xlab="Steps per day",main ="Imputed Data",
+           col ="green",breaks =20,xlim = c(0,25000),ylim = c(0,25))
+
+```
+
+### Mean and Median Steps per day: Original data vs imputed data
+
+```{r createtable2, results='asis', echo=FALSE, warning=FALSE}
+
+mean.total.cleansteps <- round(mean(activity.day.clean[,2]),2)
+median.total.cleansteps <- round(median(activity.day.clean[,2]),2)
+
+tabclean <- rbind(tab,c(mean.total.cleansteps,median.total.cleansteps))
+row.names(tabclean)<-c("Original Data","Imputed Data")
+kable(tabclean)
+```
+ 
+
+## Weekday vs Weekend Activity Pattern
+
+```{r timeseries2,echo=TRUE}
+
+activity.time.clean <- as.tbl(activity.clean) %>%
+    mutate(isWeekday = ifelse(weekdays(date) %in% c("Saturday","Sunday"),"Weekend","Weekday"))%>%
+    mutate(isWeekday=as.factor(isWeekday))%>%
+    group_by(isWeekday,interval)%>%
+    summarize(AvgSteps = mean(clean.steps))%>%
+    select(interval,AvgSteps,isWeekday)
+
+    
+g <- ggplot(activity.time.clean) +
+    geom_line(aes(x= interval, y=AvgSteps, col = isWeekday),size =2) +
+    labs( x = "Time Interval(in mins)", y="Average Steps",title ="Activity Pattern") +
+    facet_wrap(facets = ~ isWeekday,nrow=2)+
+    theme_fivethirtyeight()
+
+print(g)
+
+```

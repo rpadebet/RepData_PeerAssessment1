@@ -3,42 +3,155 @@
 
 ## Loading and preprocessing the data
 
+
+
 ```r
 activity <-read.csv("activity.csv",stringsAsFactors = FALSE)
 str(activity)
 ```
 
 ```
-## 'data.frame':	17568 obs. of  3 variables:
-##  $ steps   : int  NA NA NA NA NA NA NA NA NA NA ...
-##  $ date    : chr  "2012-10-01" "2012-10-01" "2012-10-01" "2012-10-01" ...
-##  $ interval: int  0 5 10 15 20 25 30 35 40 45 ...
+'data.frame':	17568 obs. of  3 variables:
+ $ steps   : int  NA NA NA NA NA NA NA NA NA NA ...
+ $ date    : chr  "2012-10-01" "2012-10-01" "2012-10-01" "2012-10-01" ...
+ $ interval: int  0 5 10 15 20 25 30 35 40 45 ...
 ```
 
 ```r
-summary(activity)
+activity$date = as.Date(activity$date,"%Y-%m-%d")
 ```
 
+## Total Number of steps per day 
+
+### Histogram Plot
+
+```r
+activity.day.steps <- aggregate(activity$steps, 
+                                by = list(activity$date),
+                                FUN = "sum",na.rm = TRUE)
+
+h1 <- hist(activity.day.steps[,2],xlab="Steps per day",
+           main ="Number of Steps per day",
+           col ="salmon",breaks =20)
 ```
-##      steps            date              interval     
-##  Min.   :  0.00   Length:17568       Min.   :   0.0  
-##  1st Qu.:  0.00   Class :character   1st Qu.: 588.8  
-##  Median :  0.00   Mode  :character   Median :1177.5  
-##  Mean   : 37.38                      Mean   :1177.5  
-##  3rd Qu.: 12.00                      3rd Qu.:1766.2  
-##  Max.   :806.00                      Max.   :2355.0  
-##  NA's   :2304
+
+![](PA1_template_files/figure-html/unnamed-chunk-3-1.png)<!-- -->
+
+### Mean and Median steps per day
+
+```r
+mean.total.steps <- round(mean(activity.day.steps[,2]),2)
+median.total.steps <- round(median(activity.day.steps[,2]),2)
+tab <- data.frame(Mean = mean.total.steps,Median = median.total.steps)
+kable(tab)
 ```
-## What is mean total number of steps taken per day?
 
+    Mean   Median
+--------  -------
+ 9354.23    10395
+ 
 
+## Average daily Activity Pattern
 
-## What is the average daily activity pattern?
+### Time Series Plot
 
+```r
+activity.time.steps <- aggregate(activity$steps, by = list(activity$interval),FUN = "mean",na.rm = TRUE)
+names(activity.time.steps) <- c("Interval","AvgSteps")
+Max.5 <- activity.time.steps[activity.time.steps$AvgSteps == max(activity.time.steps$AvgSteps),1 ]
+
+plot(x = activity.time.steps$Interval,y = activity.time.steps$AvgSteps,
+     type = 'l',main = "Average daily pattern",
+     xlab = "Minutes",ylab = "Number of Steps",col = "red",lwd=2 )
+abline(v = Max.5,col = "blue",lwd =1)
+```
+
+![](PA1_template_files/figure-html/timeseries1-1.png)<!-- -->
+**5 minute interval with maximum number of steps is at : 835 mins**
 
 
 ## Imputing missing values
 
 
+```r
+NumNA <- sum(is.na(activity$steps))
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+**The total number of rows with `NA`s is 2304**
+
+### Creating a data set after imputing data
+
+**Impute Strategy** is to replace NA values for any 5 minute interval with the average value for that 5 minute interval across all days
+
+
+```r
+impute <- function(v){
+    if(is.na(v$steps)){
+        v$steps = activity.time.steps[activity.time.steps$Interval==v$interval,2]
+    }
+    else{
+        v$steps = v$steps
+    } 
+    return(v$steps)
+}
+
+clean.steps = as.vector(NULL)
+
+for (i in seq(1:nrow(activity))){
+    clean.steps[i] <- impute(activity[i,])
+}
+
+activity.clean <-cbind(activity,clean.steps)
+```
+
+## Comparison of histograms after imputing data
+
+
+```r
+activity.day.clean <- aggregate(activity.clean$clean.steps,
+                                     by = list(activity.clean$date),
+                                     FUN = "sum")
+
+par(mfrow=c(1,2))
+h1 <- hist(activity.day.steps[,2],
+           xlab="Steps per day",main ="Original Data",
+           col ="salmon",breaks =20,xlim = c(0,25000),ylim = c(0,25))
+
+h2 <- hist(activity.day.clean[,2],
+           xlab="Steps per day",main ="Imputed Data",
+           col ="green",breaks =20,xlim = c(0,25000),ylim = c(0,25))
+```
+
+![](PA1_template_files/figure-html/hist2-1.png)<!-- -->
+
+### Mean and Median Steps per day: Original data vs imputed data
+
+
+                     Mean     Median
+--------------  ---------  ---------
+Original Data     9354.23   10395.00
+Imputed Data     10766.19   10766.19
+ 
+
+## Weekday vs Weekend Activity Pattern
+
+
+```r
+activity.time.clean <- as.tbl(activity.clean) %>%
+    mutate(isWeekday = ifelse(weekdays(date) %in% c("Saturday","Sunday"),"Weekend","Weekday"))%>%
+    mutate(isWeekday=as.factor(isWeekday))%>%
+    group_by(isWeekday,interval)%>%
+    summarize(AvgSteps = mean(clean.steps))%>%
+    select(interval,AvgSteps,isWeekday)
+
+    
+g <- ggplot(activity.time.clean) +
+    geom_line(aes(x= interval, y=AvgSteps, col = isWeekday),size =2) +
+    labs( x = "Time Interval(in mins)", y="Average Steps",title ="Activity Pattern") +
+    facet_wrap(facets = ~ isWeekday,nrow=2)+
+    theme_fivethirtyeight()
+
+print(g)
+```
+
+![](PA1_template_files/figure-html/timeseries2-1.png)<!-- -->
