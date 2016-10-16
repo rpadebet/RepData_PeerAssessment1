@@ -86,20 +86,19 @@ NumNA <- sum(is.na(activity$steps))
 
 ```r
 impute <- function(v){
-    if(is.na(v$steps)){
-        v$steps = activity.time.steps[activity.time.steps$Interval==v$interval,2]
+    
+    if(is.na(v['steps'])){
+        steps = activity.time.steps[activity.time.steps$Interval==as.numeric(v['interval']),2]
     }
     else{
-        v$steps = v$steps
+        steps = v['steps']
     } 
-    return(v$steps)
+    return(steps)
 }
 
 clean.steps = as.vector(NULL)
 
-for (i in seq(1:nrow(activity))){
-    clean.steps[i] <- impute(activity[i,])
-}
+clean.steps <- apply(X = activity[,c(1,3)],1,FUN = impute)
 
 activity.clean <-cbind(activity,clean.steps)
 ```
